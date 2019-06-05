@@ -18,6 +18,42 @@ lambda+DynamoDB使う。1日2回cronで検索を行い、登録されていな�
 ここで引っかかったのはまだチェックしていないツイートなので、
 これらのうち、ネガポジスコアがある一定の閾値を超えていたツイートをまとめてslackに投げる。
 
+## ネガポジ判定
+ツイートのネガポジ判定には、東北大学の乾・岡崎研究室が公開している日本語評価極性辞書を使用する。
+
+
+## データ分析
+ネガポジ度を5段階ぐらいに区分分けして、指定期間でどのくらいの割合でできているかを判断する。
+
+
+## 実装に関して
+
+### twitterで検索結果のツイートをとってくる方法
+http://testpy.hatenablog.com/entry/2017/11/05/012906
+http://westplain.sakuraweb.com/translate/twitter/Documentation/REST-APIs/Public-API/The-Search-API.cgi
+https://syncer.jp/Web/API/Twitter/REST_API/GET/search/tweets/
+http://ailaby.com/twitter_api/
+https://gist.github.com/cucmberium/e687e88565b6a9ca7039
+
+キーがわからないので、GASからとってくる
+https://script.google.com/a/lancers.co.jp/d/1kEFd7il1l8psOCAjMgiTg7n53JeGZHOY5B40GzO2wtciqZtANOyJij14/edit
+https://qiita.com/akkey2475/items/ad190a507b4a7b7dc17c
+
+用いる検索クエリ
+`-ヘブン -ヘヴン -沢渡 -遊矢 -赤馬 -遊戯王 -遊☆戯☆王 -デニス -ARC-V -アーク・ファイブ -黒咲 -デュエル`
+
+
+### lambdaにmecabを乗せる方法
+https://dev.classmethod.jp/cloud/aws-lambda-with-mecab/
+https://dev.classmethod.jp/cloud/improved-aws-lambda-with-mecab/
+
+
 ## 参考文献
 https://qiita.com/moroku0519/items/e6352d31311418f38227
 http://www.cl.ecei.tohoku.ac.jp/index.php?Open%20Resources%2FJapanese%20Sentiment%20Polarity%20Dictionary
+https://dailytextmining.hatenablog.com/entry/2018/07/12/065500
+
+
+
+### 日本語感情極性対応表リスト
+http://www.lr.pi.titech.ac.jp/~takamura/pndic_ja.html
