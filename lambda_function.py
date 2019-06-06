@@ -3,6 +3,7 @@ import threading
 import os
 import json
 import boto3
+from boto3.dynamodb.conditions import Key
 from datetime import datetime as dt
 import requests
 from decimal import Decimal
@@ -64,16 +65,28 @@ def main_func(event, content):
         #NLPAPI
         nlp_url = 'https://language.googleapis.com/v1/documents:analyzeSentiment?key=' + NLP_Key
 
-        # try:
-        #     dynamoDB = boto3.resource("dynamodb")
-        #     table = dynamoDB.Table("twitter_negpos")  # DynamoDBのテーブル名
+        # 基準となる日
+        ref_daytime = Decimal(since.strftime("%Y-%m-%d").timestamp())
 
-        #     # 昨日からのツイートデータをとってくる
-        #     dynamo_data = table.query(
-        #         KeyConditionExpression = Key("tweet_time").gt(since.strftime("%Y-%m-%d"))
-        #     )
-        # except Exception as e:
-        #     print(e)
+        # 昨日からのツイート一覧をとってくる
+        try:
+            dynamoDB = boto3.resource("dynamodb")
+            table = dynamoDB.Table("twitter_negpos")  # DynamoDBのテーブル名
+
+            # 昨日からのツイートデータをとってくる
+            dynamo_data = table.query(
+                KeyConditionExpression=Key("tweet_time").gt(ref_daytime)
+            )
+        except Exception as e:
+            print(e)
+
+        # 検知済みのツイートを弾く
+        for tweet in res_text['statuses']:
+            if tweet['id_str'] in dynamo_data:
+                continue
+            # この下でgoogle NLP叩く
+
+
 
         # ツイートデータを保存する
         try:
@@ -96,13 +109,6 @@ def main_func(event, content):
                 )
         except Exception as e:
             print(e)
-
-        # すでに保存しているやつをまとめて弾く
-        # for tweet in res.txt['statuses'][0]:
-
-
-        # for tweet in res.txt['statuses']:
-
 
         # print(res.text)
 
