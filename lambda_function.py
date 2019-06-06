@@ -3,8 +3,9 @@ import threading
 import os
 import json
 import boto3
-import datetime
+from datetime import datetime as dt
 import requests
+from decimal import Decimal
 
 from requests_oauthlib import OAuth1Session  # OAuthのライブラリの読み込み
 
@@ -43,7 +44,6 @@ def date_translate(date):
     d = pre_date[2]
     time = pre_date[3]
     res_date = '{}-{}-{} {}'.format(y, m, d, time)
-    print(res_date)
     return res_date
 
 def main_func(event, content):
@@ -52,10 +52,10 @@ def main_func(event, content):
     query = os.environ["query"]
     # twitter検索結果取得エンドポイント
     url = 'https://api.twitter.com/1.1/search/tweets.json'
-    since = datetime.datetime.now()
-    query += " since:" + since.strftime("%Y-%m-%d")
 
     # ランサーズが含まれる昨日からのツイートを取得する
+    since = dt.now()
+    query += " since:" + since.strftime("%Y-%m-%d")
     res = twitter.get(url, params={'q': query})
 
     if res.status_code == 200:
@@ -82,8 +82,8 @@ def main_func(event, content):
 
             for tweet in res_text['statuses']:
                 # print(tweet)
-                # 投稿データを加工
-                tweet_time = date_translate(tweet['created_at'])
+                preform_date = dt.strptime(date_translate(tweet['created_at']), '%Y-%m-%d %H:%M:%S')
+                tweet_time = Decimal(preform_date.timestamp())
 
                 # 昨日からのツイートデータをとってくる
                 res = table.put_item(
