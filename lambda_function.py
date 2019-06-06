@@ -1,6 +1,9 @@
 # 並列処理
 import threading
 import os
+import json
+import boto3
+import datetime.datetime as dt
 
 from requests_oauthlib import OAuth1Session  # OAuthのライブラリの読み込み
 
@@ -33,8 +36,13 @@ def main_func(event, content):
 
     # twitter検索結果取得エンドポイント
     url = 'https://api.twitter.com/1.1/search/tweets.json'
+    query += " since:" + dt.today().strftome("%Y-%m-%d")
+    print(query)
 
     # ランサーズが含まれる昨日からのツイートを取得する
     res = twitter.get(url, params={'q': query})
-    print(res)
-    return
+
+    if res.status_code == 200:
+        print(res.text)
+
+    return 0
