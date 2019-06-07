@@ -61,55 +61,99 @@ def main_func(event, content):
 
     if res.status_code == 200:
         res_text = json.loads(res.text)
-        print(res_text)
+        # print(res_text)
+
         #NLPAPI
         nlp_url = 'https://language.googleapis.com/v1/documents:analyzeSentiment?key=' + NLP_Key
 
+        header = {'Content-Type': 'application/json'}
+        body = {
+            "document": {
+                "type": "PLAIN_TEXT",
+                "language": "ja",
+                "content":"test"
+            },
+            "encodingType": "UTF8"
+        }
+        response = requests.post(url, headers=header, json=body).json()
+        print(response)
+
+
         # 基準となる日
-        ref_daytime = Decimal(since.strftime("%Y-%m-%d").timestamp())
+        ref_daytime = Decimal(since.timestamp())
 
         # 昨日からのツイート一覧をとってくる
-        try:
-            dynamoDB = boto3.resource("dynamodb")
-            table = dynamoDB.Table("twitter_negpos")  # DynamoDBのテーブル名
+        # try:
+        #     dynamoDB = boto3.resource("dynamodb")
+        #     table = dynamoDB.Table("twitter_negpos")  # DynamoDBのテーブル名
 
-            # 昨日からのツイートデータをとってくる
-            dynamo_data = table.query(
-                KeyConditionExpression=Key("tweet_time").gt(ref_daytime)
-            )
-        except Exception as e:
-            print(e)
+        #     # 昨日からのツイートデータをとってくる
+        #     dynamo_data = table.query(
+        #         KeyConditionExpression=Key("tweet_time").gt(ref_daytime)
+        #     )
+        # except Exception as e:
+        #     print(e)
+
+        pos_tweet = ""
+        neg_tweet = ""
+        # print(dynamo_data)
 
         # 検知済みのツイートを弾く
-        for tweet in res_text['statuses']:
-            if tweet['id_str'] in dynamo_data:
-                continue
-            # この下でgoogle NLP叩く
+    #     for tweet in res_text['statuses']:
+    #         # if tweet['id_str'] in dynamo_data:
+    #         #     continue
+    #         # この下でgoogle NLP叩く
+    #         body['content'] = tweet['text']
+    #         response = requests.post(url, headers=header, json=body).json()
 
+    #         print(response)
+    #         score = 0
+    #         tweet_link = "https://twitter.com/" + tweet['user']['screen_name'] + "status" + tweet['id_str']
 
+    #         if score > 1:
+    #             pos_tweet += tweet['text']
+    #             pos_tweet += tweet_link + "\n\n"
 
-        # ツイートデータを保存する
-        try:
-            dynamoDB = boto3.resource("dynamodb")
-            table = dynamoDB.Table("twitter_negpos")  # DynamoDBのテーブル名
+    #         if score < -1:
+    #             neg_tweet += tweet['text']
+    #             neg_tweet += tweet_link
 
-            for tweet in res_text['statuses']:
-                # print(tweet)
-                preform_date = dt.strptime(date_translate(tweet['created_at']), '%Y-%m-%d %H:%M:%S')
-                tweet_time = Decimal(preform_date.timestamp())
+    #         # ツイートデータを保存する
+    #         try:
+    #             dynamoDB = boto3.resource("dynamodb")
+    #             table = dynamoDB.Table("twitter_negpos")  # DynamoDBのテーブル名
 
-                # 昨日からのツイートデータをとってくる
-                res = table.put_item(
-                    Item={
-                        "tweet_id": tweet['id_str'],
-                        "negpos": 0,
-                        "tweet_user": tweet['user']['screen_name'],
-                        "tweet_time": tweet_time
-                    }
-                )
-        except Exception as e:
-            print(e)
+    #             for tweet in res_text['statuses']:
+    #                 # print(tweet)
+    #                 preform_date = dt.strptime(date_translate(tweet['created_at']), '%Y-%m-%d %H:%M:%S')
+    #                 tweet_time = Decimal(preform_date.timestamp())
 
-        # print(res.text)
+    #                 # 昨日からのツイートデータをとってくる
+    #                 res = table.put_item(
+    #                     Item={
+    #                         "tweet_time": tweet_time,
+    #                         "tweet_id": tweet['id_str'],
+    #                         "negpos": score,
+    #                         "tweet_text": tweet['text'],
+    #                         "tweet_user": tweet['user']['screen_name'],
+    #                         "tweet_link": tweet_link
+    #                     }
+    #                 )
+    #         except Exception as e:
+    #             print(e)
 
-    return 0
+    #         post_text = "@urara.masahiro\n監視期間\n" + "■ポジティブ\n" + pos_tweet + "\n\n■ネガティブ\n" + neg_tweet
+
+    #         SLACK_WEBHOOK = "https://hooks.slack.com/services/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"
+    #         # ツイートデータをslackに投げる
+    #         payload_dic = {
+    #             "text": post_text,
+    #             "username": "twitterネガポジ分析",
+    #             "channel": "#gr_cc_twitter対応",  # も必要
+    #         }
+
+    #         r = requests.post(SLACK_WEBHOOK, data=json.dumps(payload_dic))
+
+    #     # print(res.text)
+
+    # return 0
