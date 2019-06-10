@@ -47,7 +47,8 @@ def get_tweet_data(ref_day):
         table = dynamoDB.Table("twitter_negpos")  # DynamoDBのテーブル名
 
         dynamo_data = table.query(
-            KeyConditionExpression=Key("tweet_time").gt(ref_day)
+            IndexName='search_query-tweet_time-index',
+            KeyConditionExpression=Key("search_query").eq('ランサーズ') & Key("tweet_time").gt(ref_day)
         )
 
         return dynamo_data
@@ -100,32 +101,43 @@ def main_func(event, content):
 
         dynamo_data = get_tweet_data(ref_day)
 
-        # pos_tweet = ""
-        # neg_tweet = ""
-        print(dynamo_data)
+        pos_tweet = ""
+        neg_tweet = ""
+
+        # すでにデータが保存されているツイート
+        tweet_ids = []
+        for d_tweet in dynamo_data['Items']:
+            tweet_ids.append(d_tweet['tweet_id'])
 
         # # 検知済みのツイートを弾く
         for tweet in res_text['statuses']:
-        #     # if tweet['id_str'] in dynamo_data:
-        #     #     continue
-        #     # この下でgoogle NLP叩く
+            # if tweet['id_str'] in tweet_ids:
+            #     continue
+
+            # この下でgoogle NLP叩く
             body['document']['content'] = tweet['text']
-            print(body)
             response = requests.post(nlp_url, headers=header, json=body).json()
 
-            print(response)
             score = response['documentSentiment']['score']
             abs_score = response['documentSentiment']['magnitude']
-            print(score)
             tweet_link = "https://twitter.com/" + tweet['user']['screen_name'] + "/status/" + tweet['id_str']
 
-        #     if score > 1:
-        #         pos_tweet += tweet['text']
-        #         pos_tweet += tweet_link + "\n\n"
+            if abs_score > 1:
+                if score > 0:
+                    pos_tweet += "**ツイートデータ**" + '\n'
+                    pos_tweet += "ネガポジスコア :" + str(score) + '\n'
+                    pos_tweet += "絶対スコア :" + str(abs_score) + '\n'
+                    pos_tweet += "ツイートユーザ: https://twitter.com/" + tweet['user']['screen_name'] + '\n\n'
+                    pos_tweet += "ツイート本文: \n```" + tweet['text'] + '```\n'
+                    pos_tweet += tweet_link + "\n\n"
 
-        #     if score < -1:
-        #         neg_tweet += tweet['text']
-        #         neg_tweet += tweet_link
+                if score <= 0:
+                    neg_tweet += "**ツイートデータ**" + '\n'
+                    neg_tweet += "ネガポジスコア :" + str(score) + '\n'
+                    neg_tweet += "絶対スコア :" + str(abs_score) + '\n'
+                    neg_tweet += "ツイートユーザ: https://twitter.com/" + tweet['user']['screen_name'] + '\n\n'
+                    neg_tweet += "ツイート本文: \n```" + tweet['text'] + '```\n'
+                    neg_tweet += tweet_link + "\n\n"
 
             # ツイートデータを保存する
             try:
@@ -141,27 +153,29 @@ def main_func(event, content):
                     Item={
                         "tweet_id": str(tweet['id_str']),
                         "search_query": "ランサーズ",
-                        'abs_score' :
+                        'abs_score': Decimal(str(abs_score)),
                         "negpos": Decimal(str(score)),
                         "tweet_text": tweet['text'],
                         "tweet_user": tweet['user']['screen_name'],
                         "tweet_time": tweet_time,
-                        "tweet_link": tweet_link
+                        "tweet_link": tweet_link,
+                        "post_status" : 0
                     }
                 )
             except Exception as e:
                 print(e)
 
-        # post_text = "@urara.masahiro\n\n" + "■ポジティブ\n" + pos_tweet + "\n\n■ネガティブ\n" + neg_tweet
+        post_text = "テスト\n" + "■ポジティブ\n" + pos_tweet + "\n\n■ネガティブ\n" + neg_tweet
 
-        # SLACK_WEBHOOK = "https://hooks.slack.com/services/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"
-        # # ツイートデータをslackに投げる
-        # payload_dic = {
-        #     "text": post_text,
-        #     "username": "twitterネガポジ分析",
-        #     "channel": "#gr_cc_twitter対応",  # も必要
-        # }
+        SLACK_WEBHOOK = "https://hooks.slack.com/services/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"
+        # ツイートデータをslackに投げる
+        payload_dic = {
+            "text": post_text,
+            "username": "twitterネガポジ分析",
+            "unfurl_links" : False,
+            "channel": "#t_mizushima",  # も必要
+        }
 
-        # r = requests.post(SLACK_WEBHOOK, data=json.dumps(payload_dic))
+        r = requests.post(SLACK_WEBHOOK, data=json.dumps(payload_dic))
 
     return 0
