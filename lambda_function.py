@@ -9,14 +9,13 @@ from datetime import datetime as dt
 import datetime
 import requests
 from decimal import Decimal
-import random
 
 from requests_oauthlib import OAuth1Session  # OAuthのライブラリの読み込み
 
 # ネガポジ閾値
-negpos_threshold = int(os.environ["negpos_threshold"])
+# negpos_threshold = int(os.environ["negpos_threshold"])
 # Slack通知先
-slack_room = os.environ["slack_chanel"]
+# slack_room = os.environ["slack_chanel"]
 
 # twitterAPIアクセストークン
 CK = os.environ["twitter_CK"]
@@ -55,6 +54,7 @@ def get_tweet_data(ref_day):
     except Exception as e:
         print(e)
 
+# twitterからとってきたデータの日付を整える
 def date_translate(date):
     pre_date = date.split(' ')
     y = pre_date[-1]
@@ -74,11 +74,9 @@ def main_func(event, content):
     since = dt.now() - datetime.timedelta(days=1)
     query += " since:" + since.strftime("%Y-%m-%d")
     res = twitter.get(url, params={'q': query})
-    res_status_code = 200
-
-    if res_status_code == 200:
+　　
+    if res.status_code == 200:
         res_text = json.loads(res.text)
-        # print(res_text)
 
         #NLPAPI
         nlp_url = 'https://language.googleapis.com/v1/documents:analyzeSentiment?key=' + NLP_Key
@@ -93,12 +91,9 @@ def main_func(event, content):
             "encodingType": "UTF8"
         }
         # response = requests.post(nlp_url, headers=header, json=body).json()
-        # print(response)
 
         # 基準となる日
         ref_day = Decimal(since.timestamp())
-        print(ref_day)
-
         dynamo_data = get_tweet_data(ref_day)
 
         pos_tweet = ""
@@ -111,8 +106,8 @@ def main_func(event, content):
 
         # # 検知済みのツイートを弾く
         for tweet in res_text['statuses']:
-            # if tweet['id_str'] in tweet_ids:
-            #     continue
+            if tweet['id_str'] in tweet_ids:
+                continue
 
             # この下でgoogle NLP叩く
             body['document']['content'] = tweet['text']
@@ -165,15 +160,20 @@ def main_func(event, content):
             except Exception as e:
                 print(e)
 
+        if pos_tweet == "":
+            pos_tweet = "今回通知分はないよ\n"
+        if neg_tweet == "":
+            neg_tweet = "今回通知分はないよ\n"
+
         post_text = "テスト\n" + "■ポジティブ\n" + pos_tweet + "\n\n■ネガティブ\n" + neg_tweet
 
-        SLACK_WEBHOOK = "https://hooks.slack.com/services/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"
+        SLACK_WEBHOOK = "https://hooks.slack.com/services/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"
         # ツイートデータをslackに投げる
         payload_dic = {
             "text": post_text,
             "username": "twitterネガポジ分析",
             "unfurl_links" : False,
-            "channel": "#t_mizushima",  # も必要
+            "channel": "#gr_cc_twitter対応",
         }
 
         r = requests.post(SLACK_WEBHOOK, data=json.dumps(payload_dic))
