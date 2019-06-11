@@ -4,7 +4,7 @@ import threading
 import os
 import json
 import boto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Key, Attr
 from datetime import datetime as dt
 import datetime
 import requests
@@ -73,26 +73,63 @@ def post_slack(neg_tweets, pos_tweets):
     }
 
     r = requests.post(SLACK_WEBHOOK, data=json.dumps(payload_dic))
+    return r
 
 
 # Slackに投稿したデータに対してフラグを立てる。
-# def set_post_flag(tweet_id):
+def set_post_flag(pos_data, neg_data):
+    dynamoDB = boto3.resource("dynamodb")
+    table = dynamoDB.Table("twitter_negpos")  # DynamoDBのテーブル名
+
+    for pos_tweet in pos_data['Items']:
+        try:
+            res = table.update_item(
+                Key = {
+                    'tweet_id': str(pos_tweet['tweet_id'])
+                },
+                UpdateExpression='SET post_status = :f',
+                ExpressionAttributeValues={
+                    ':f': Decimal(1)
+                }
+            )
+        except Exception as e:
+            print(e)
+
+    for neg_tweet in neg_data['Items']:
+        try:
+            res = table.update_item(
+                Key = {
+                    'tweet_id': str(neg_tweet['tweet_id'])
+                },
+                UpdateExpression='SET post_status = :f',
+                ExpressionAttributeValues={
+                    ':f': Decimal(1)
+                }
+            )
+        except Exception as e:
+            print(e)
+
+    return 0
 
 # Slackに投稿するデータのみを抽出する
-# def setup_post_data():
-#     try:
-#         dynamoDB = boto3.resource("dynamodb")
-#         table = dynamoDB.Table("twitter_negpos")  # DynamoDBのテーブル名
+def setup_post_data():
+    try:
+        dynamoDB = boto3.resource("dynamodb")
+        table = dynamoDB.Table("twitter_negpos")  # DynamoDBのテーブル名
 
-#         dynamo_data = table.query(
-#             IndexName='search_query-tweet_time-index',
-#             KeyConditionExpression=Key("search_query").eq(
-#                 'ランサーズ') & Key("tweet_time").gt(ref_day)
-#         )
+        pos_date = table.query(
+            IndexName='post_status-negpos_status-index',
+            KeyConditionExpression=Key("post_status").eq(0) & Key("negpos_status").eq(1)
+        )
 
-#         return dynamo_data
-#     except Exception as e:
-#         print(e)
+        neg_date = table.query(
+            IndexName='post_status-negpos_status-index',
+            KeyConditionExpression=Key("post_status").eq(0) & Key("negpos_status").eq(-1)
+        )
+
+        return pos_date, neg_date
+    except Exception as e:
+        print(e)
 
 # twitterからとってきたデータの日付を整える
 def date_translate(date):
@@ -117,7 +154,7 @@ def main_func(event, content):
 
     if res.status_code == 200:
         res_text = json.loads(res.text)
-        print(res_text)
+        # print(res_text)
 
         #NLPAPI
         nlp_url = 'https://language.googleapis.com/v1/documents:analyzeSentiment?key=' + NLP_Key
@@ -162,23 +199,10 @@ def main_func(event, content):
             negpos_flag = 0
 
             if abs_score > 1:
-                if score > 0:
+                if score >= 0:
                     negpos_flag = 1
-                    pos_tweet += "**ツイートデータ**" + '\n'
-                    pos_tweet += "ネガポジスコア :" + str(score) + '\n'
-                    pos_tweet += "絶対スコア :" + str(abs_score) + '\n'
-                    pos_tweet += "ツイートユーザ: https://twitter.com/" + tweet['user']['screen_name'] + '\n\n'
-                    pos_tweet += "ツイート本文: \n```" + tweet['text'] + '```\n'
-                    pos_tweet += tweet_link + "\n\n"
-
-                if score <= 0:
+                else:
                     negpos_flag = -1
-                    neg_tweet += "**ツイートデータ**" + '\n'
-                    neg_tweet += "ネガポジスコア :" + str(score) + '\n'
-                    neg_tweet += "絶対スコア :" + str(abs_score) + '\n'
-                    neg_tweet += "ツイートユーザ: https://twitter.com/" + tweet['user']['screen_name'] + '\n\n'
-                    neg_tweet += "ツイート本文: \n```" + tweet['text'] + '```\n'
-                    neg_tweet += tweet_link + "\n\n"
 
             # ツイートデータを保存する
             try:
@@ -188,7 +212,6 @@ def main_func(event, content):
                 preform_date = dt.strptime(date_translate(tweet['created_at']), '%Y-%m-%d %H:%M:%S')
                 tweet_time = Decimal(preform_date.timestamp())
 
-                # 昨日からのツイートデータをとってくる
                 res = table.put_item(
                     Item={
                         "tweet_id": str(tweet['id_str']),
@@ -205,5 +228,40 @@ def main_func(event, content):
                 )
             except Exception as e:
                 print(e)
+
+        now = dt.now()
+        # 時刻データ 12:00  03:00:19.908117
+        check_time = str(now.hour) + str(now.minute)
+
+        # 9時と18時にslackに投稿する
+        # if check_time == '00' or check_time == '90':
+        pos_data, neg_data = setup_post_data()
+
+        pos_tweets = ""
+        neg_tweets = ""
+
+        print(pos_data)
+        print(neg_data)
+
+        for pos_tweet in pos_data['Items']:
+            pos_tweets += "*ツイートデータ*" + '\n'
+            pos_tweets += "ネガポジスコア :" + str(pos_tweet['negpos']) + '\n'
+            pos_tweets += "絶対スコア :" + str(pos_tweet['abs_score']) + '\n'
+            pos_tweets += "ツイートユーザ: https://twitter.com/" + pos_tweet['tweet_user'] + '\n\n'
+            pos_tweets += "ツイート本文: \n```" + pos_tweet['tweet_text'] + '```\n'
+            pos_tweets += pos_tweet['tweet_link'] + "\n\n"
+
+        for neg_tweet in neg_data['Items']:
+            neg_tweets += "*ツイートデータ*" + '\n'
+            neg_tweets += "ネガポジスコア :" + str(neg_tweet['negpos']) + '\n'
+            neg_tweets += "絶対スコア :" + str(neg_tweet['abs_score']) + '\n'
+            neg_tweets += "ツイートユーザ: https://twitter.com/" + neg_tweet['tweet_user'] + '\n\n'
+            neg_tweets += "ツイート本文: \n```" + neg_tweet['tweet_text'] + '```\n'
+            neg_tweets += neg_tweet['tweet_link'] + "\n\n"
+
+        post_slack(neg_tweets, pos_tweets)
+
+        # 投稿したtweetデータのフラグを立てる
+        set_post_flag(pos_data, neg_data)
 
     return 0
