@@ -12,11 +12,6 @@ from decimal import Decimal
 
 from requests_oauthlib import OAuth1Session  # OAuthのライブラリの読み込み
 
-# ネガポジ閾値
-# negpos_threshold = int(os.environ["negpos_threshold"])
-# Slack通知先
-# slack_room = os.environ["slack_chanel"]
-
 # twitterAPIアクセストークン
 CK = os.environ["twitter_CK"]
 CS = os.environ["twitter_CS"]
@@ -63,7 +58,7 @@ def post_slack(neg_tweets, pos_tweets):
 
     post_text = "テスト\n" + "■ポジティブ\n" + pos_tweets + "\n\n■ネガティブ\n" + neg_tweets
 
-    SLACK_WEBHOOK = "https://hooks.slack.com/services/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"
+    SLACK_WEBHOOK = os.environ["Slack_webhook"]
     # ツイートデータをslackに投げる
     payload_dic = {
         "text": post_text,
@@ -84,7 +79,7 @@ def set_post_flag(pos_data, neg_data):
     for pos_tweet in pos_data['Items']:
         try:
             res = table.update_item(
-                Key = {
+                Key={
                     'tweet_id': str(pos_tweet['tweet_id'])
                 },
                 UpdateExpression='SET post_status = :f',
@@ -98,7 +93,7 @@ def set_post_flag(pos_data, neg_data):
     for neg_tweet in neg_data['Items']:
         try:
             res = table.update_item(
-                Key = {
+                Key={
                     'tweet_id': str(neg_tweet['tweet_id'])
                 },
                 UpdateExpression='SET post_status = :f',
@@ -112,6 +107,8 @@ def set_post_flag(pos_data, neg_data):
     return 0
 
 # Slackに投稿するデータのみを抽出する
+
+
 def setup_post_data():
     try:
         dynamoDB = boto3.resource("dynamodb")
@@ -142,7 +139,7 @@ def date_translate(date):
     return res_date
 
 def main_func(event, content):
-    twitter = OAuth1Session(CK, CS, AT, ATS)  #認証処理
+    twitter = OAuth1Session(CK, CS, AT, ATS)  # 認証処理
     query = os.environ["query"]
     # twitter検索結果取得エンドポイント
     url = 'https://api.twitter.com/1.1/search/tweets.json'
@@ -154,7 +151,6 @@ def main_func(event, content):
 
     if res.status_code == 200:
         res_text = json.loads(res.text)
-        # print(res_text)
 
         #NLPAPI
         nlp_url = 'https://language.googleapis.com/v1/documents:analyzeSentiment?key=' + NLP_Key
@@ -164,7 +160,7 @@ def main_func(event, content):
             "document": {
                 "type": "PLAIN_TEXT",
                 "language": "ja",
-                "content" : ""
+                "content": ""
             },
             "encodingType": "UTF8"
         }
@@ -188,8 +184,13 @@ def main_func(event, content):
                 continue
 
             # この下でgoogle NLP叩く
-            body['document']['content'] = tweet['text']
-            response = requests.post(nlp_url, headers=header, json=body).json()
+            try:
+                body['document']['content'] = tweet['text']
+                response = requests.post(
+                    nlp_url, headers=header, json=body).json()
+            except Exception as e:
+                print(e)
+                continue
 
             score = response['documentSentiment']['score']
             abs_score = response['documentSentiment']['magnitude']
@@ -223,45 +224,47 @@ def main_func(event, content):
                         "tweet_time": tweet_time,
                         "tweet_link": tweet_link,
                         "negpos_status": negpos_flag,
-                        "post_status" : 0
+                        "post_status": 0
                     }
                 )
             except Exception as e:
                 print(e)
+                continue
 
         now = dt.now()
         # 時刻データ 12:00  03:00:19.908117
         check_time = str(now.hour) + str(now.minute)
 
         # 9時と18時にslackに投稿する
-        # if check_time == '00' or check_time == '90':
-        pos_data, neg_data = setup_post_data()
+        if check_time == '00' or check_time == '90':
+            pos_data, neg_data = setup_post_data()
 
-        pos_tweets = ""
-        neg_tweets = ""
+            pos_tweets = ""
+            neg_tweets = ""
 
-        print(pos_data)
-        print(neg_data)
+            for pos_tweet in pos_data['Items']:
+                pos_tweets += "*ツイートデータ*" + '\n'
+                pos_tweets += "ネガポジスコア :" + str(pos_tweet['negpos']) + '\n'
+                pos_tweets += "絶対スコア :" + str(pos_tweet['abs_score']) + '\n'
+                pos_tweets += "ツイートユーザ: https://twitter.com/" + \
+                    pos_tweet['tweet_user'] + '\n\n'
+                pos_tweets += "ツイート本文: \n```" + \
+                    pos_tweet['tweet_text'] + '```\n'
+                pos_tweets += pos_tweet['tweet_link'] + "\n\n"
 
-        for pos_tweet in pos_data['Items']:
-            pos_tweets += "*ツイートデータ*" + '\n'
-            pos_tweets += "ネガポジスコア :" + str(pos_tweet['negpos']) + '\n'
-            pos_tweets += "絶対スコア :" + str(pos_tweet['abs_score']) + '\n'
-            pos_tweets += "ツイートユーザ: https://twitter.com/" + pos_tweet['tweet_user'] + '\n\n'
-            pos_tweets += "ツイート本文: \n```" + pos_tweet['tweet_text'] + '```\n'
-            pos_tweets += pos_tweet['tweet_link'] + "\n\n"
+            for neg_tweet in neg_data['Items']:
+                neg_tweets += "*ツイートデータ*" + '\n'
+                neg_tweets += "ネガポジスコア :" + str(neg_tweet['negpos']) + '\n'
+                neg_tweets += "絶対スコア :" + str(neg_tweet['abs_score']) + '\n'
+                neg_tweets += "ツイートユーザ: https://twitter.com/" + \
+                    neg_tweet['tweet_user'] + '\n\n'
+                neg_tweets += "ツイート本文: \n```" + \
+                    neg_tweet['tweet_text'] + '```\n'
+                neg_tweets += neg_tweet['tweet_link'] + "\n\n"
 
-        for neg_tweet in neg_data['Items']:
-            neg_tweets += "*ツイートデータ*" + '\n'
-            neg_tweets += "ネガポジスコア :" + str(neg_tweet['negpos']) + '\n'
-            neg_tweets += "絶対スコア :" + str(neg_tweet['abs_score']) + '\n'
-            neg_tweets += "ツイートユーザ: https://twitter.com/" + neg_tweet['tweet_user'] + '\n\n'
-            neg_tweets += "ツイート本文: \n```" + neg_tweet['tweet_text'] + '```\n'
-            neg_tweets += neg_tweet['tweet_link'] + "\n\n"
+            post_slack(neg_tweets, pos_tweets)
 
-        post_slack(neg_tweets, pos_tweets)
-
-        # 投稿したtweetデータのフラグを立てる
-        set_post_flag(pos_data, neg_data)
+            # 投稿したtweetデータのフラグを立てる
+            set_post_flag(pos_data, neg_data)
 
     return 0
