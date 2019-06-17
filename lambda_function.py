@@ -191,6 +191,11 @@ def lambda_function(event, content):
     )
 
     if res.status_code == 200:
+        now = dt.now()
+        # 時刻データ 測定時 12:00 出力値 03:00:19.908117
+        check_time = str(now.strftime("%H")) + str(now.strftime("%M"))
+        # print(check_time)
+
         res_text = json.loads(res.text)
 
         #NLPAPI
@@ -241,10 +246,6 @@ def lambda_function(event, content):
             except Exception as e:
                 print(e)
                 continue
-
-        now = dt.now()
-        # 時刻データ 測定時 12:00 出力値 03:00:19.908117
-        check_time = str(now.strftime("%H")) + str(now.strftime("%M"))
 
         # 9時と18時にslackに投稿する. UTCなので、0時0分と9時0分。
         if check_time == '0000' or check_time == '0900':
