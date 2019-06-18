@@ -1,10 +1,7 @@
-
-# 並列処理
-import threading
 import os
 import json
 import boto3
-from boto3.dynamodb.conditions import Key, Attr
+from boto3.dynamodb.conditions import Key
 from datetime import datetime as dt
 import datetime
 import requests
@@ -30,17 +27,14 @@ MONTH_LUT = {
 }
 
 # 基準日からのツイートデータを取得する
-
-
 def get_tweet_data(ref_day):
     try:
         dynamoDB = boto3.resource("dynamodb")
-        table = dynamoDB.Table(Dynamo_table)  # DynamoDBのテーブル名
+        table = dynamoDB.Table(Dynamo_table)
 
         dynamo_data = table.query(
             IndexName='search_query-tweet_time-index',
-            KeyConditionExpression=Key("search_query").eq(
-                'ランサーズ') & Key("tweet_time").gt(ref_day)
+            KeyConditionExpression=Key("search_query").eq('ランサーズ') & Key("tweet_time").gt(ref_day)
         )
 
         return dynamo_data
@@ -48,8 +42,6 @@ def get_tweet_data(ref_day):
         print(e)
 
 # ツイートデータをDynamoDBに保存する
-
-
 def save_tweet_data(tweet, score, abs_score):
     preform_date = dt.strptime(date_translate(
         tweet['created_at']), '%Y-%m-%d %H:%M:%S')
@@ -69,7 +61,7 @@ def save_tweet_data(tweet, score, abs_score):
     # ツイートデータを保存する
     try:
         dynamoDB = boto3.resource("dynamodb")
-        table = dynamoDB.Table(Dynamo_table)  # DynamoDBのテーブル名
+        table = dynamoDB.Table(Dynamo_table)
 
         res = table.put_item(
             Item={
@@ -109,7 +101,7 @@ def post_slack(neg_tweets, pos_tweets):
         "text": post_text,
         "username": "twitterネガポジ分析",
         "unfurl_links": False,
-        "channel": "#gr_cc_twitter対応",
+        "channel": str(Slack_channel),
     }
 
     r = requests.post(SLACK_WEBHOOK, data=json.dumps(payload_dic))
@@ -119,7 +111,7 @@ def post_slack(neg_tweets, pos_tweets):
 # Slackに投稿したデータに対してフラグを立てる。
 def set_post_flag(tweet_data):
     dynamoDB = boto3.resource("dynamodb")
-    table = dynamoDB.Table(Dynamo_table)  # DynamoDBのテーブル名
+    table = dynamoDB.Table(Dynamo_table)
 
     for tweet in tweet_data['Items']:
         try:
@@ -143,18 +135,16 @@ def set_post_flag(tweet_data):
 def setup_post_data():
     try:
         dynamoDB = boto3.resource("dynamodb")
-        table = dynamoDB.Table(Dynamo_table)  # DynamoDBのテーブル名
+        table = dynamoDB.Table(Dynamo_table)
 
         pos_date = table.query(
             IndexName='post_status-negpos_status-index',
-            KeyConditionExpression=Key("post_status").eq(
-                0) & Key("negpos_status").eq(1)
+            KeyConditionExpression=Key("post_status").eq(0) & Key("negpos_status").eq(1)
         )
 
         neg_date = table.query(
             IndexName='post_status-negpos_status-index',
-            KeyConditionExpression=Key("post_status").eq(
-                0) & Key("negpos_status").eq(-1)
+            KeyConditionExpression=Key("post_status").eq(0) & Key("negpos_status").eq(-1)
         )
 
         return pos_date, neg_date
@@ -162,8 +152,6 @@ def setup_post_data():
         print(e)
 
 # twitterからとってきたデータの日付を整える
-
-
 def date_translate(date):
     pre_date = date.split(' ')
     y = pre_date[-1]
@@ -193,8 +181,7 @@ def lambda_function(event, content):
     if res.status_code == 200:
         now = dt.now()
         # 時刻データ 測定時 12:00 出力値 03:00:19.908117
-        check_time = str(now.strftime("%H")) + str(now.strftime("%M"))
-        # print(check_time)
+        check_time = str(now.hour) + str(now.minutes)
 
         res_text = json.loads(res.text)
 
@@ -210,7 +197,6 @@ def lambda_function(event, content):
             },
             "encodingType": "UTF8"
         }
-        # response = requests.post(nlp_url, headers=header, json=body).json()
 
         # 基準となる日からのツイートデータをとってくる
         ref_day = Decimal(since.timestamp())
@@ -232,8 +218,7 @@ def lambda_function(event, content):
             # この下でgoogle NLP叩く
             try:
                 body['document']['content'] = tweet['text']
-                response = requests.post(
-                    nlp_url, headers=header, json=body).json()
+                response = requests.post(nlp_url, headers=header, json=body).json()
             except Exception as e:
                 print(e)
                 continue
@@ -248,7 +233,7 @@ def lambda_function(event, content):
                 continue
 
         # 9時と18時にslackに投稿する. UTCなので、0時0分と9時0分。
-        if check_time == '0000' or check_time == '0900':
+        if check_time == '00' or check_time == '90':
             pos_data, neg_data = setup_post_data()
 
             pos_tweets = ""
